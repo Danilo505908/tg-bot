@@ -1,0 +1,9 @@
+.env
+node_modules/
+src/node_modules/
+src/.config*.json
+src/.config*.json.backup
+src/.flows.json.backup
+src/.sessions.json
+npm-debug.log*
+.DS_Store

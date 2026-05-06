@@ -1,0 +1,9 @@
+{
+  "name": "birthday-telegram-node-red",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node-RED Telegram birthday bot with PostgreSQL storage.",
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}

@@ -1,0 +1,307 @@
+[
+  {
+    "id": "tab_birthday_bot",
+    "type": "tab",
+    "label": "Telegram Birthday Bot",
+    "disabled": false,
+    "info": "Birthday reminder bot. Telegram is used through REST API calls only."
+  },
+  {
+    "id": "http_telegram_webhook",
+    "type": "http in",
+    "z": "tab_birthday_bot",
+    "name": "POST /telegram/webhook/:secret",
+    "url": "/telegram/webhook/:secret",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 170,
+    "y": 120,
+    "wires": [
+      ["fn_validate_webhook"]
+    ]
+  },
+  {
+    "id": "fn_validate_webhook",
+    "type": "function",
+    "z": "tab_birthday_bot",
+    "name": "Validate webhook secret",
+    "func": "const expected = env.get(\"TELEGRAM_WEBHOOK_SECRET\");\nconst urlSecret = msg.req && msg.req.params && msg.req.params.secret;\nconst headerSecret = msg.req && msg.req.headers && msg.req.headers[\"x-telegram-bot-api-secret-token\"];\n\nif (!expected || urlSecret !== expected || headerSecret !== expected) {\n    msg.statusCode = 403;\n    msg.payload = { ok: false, error: \"forbidden\" };\n    return [null, msg];\n}\n\nmsg.telegramUpdate = msg.payload;\nmsg.statusCode = 200;\nmsg.payload = { ok: true };\nreturn [msg, null];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 120,
+    "wires": [
+      ["http_webhook_ok", "fn_handle_update"],
+      ["http_webhook_forbidden"]
+    ]
+  },
+  {
+    "id": "http_webhook_ok",
+    "type": "http response",
+    "z": "tab_birthday_bot",
+    "name": "200 OK",
+    "statusCode": "",
+    "headers": {},
+    "x": 690,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "http_webhook_forbidden",
+    "type": "http response",
+    "z": "tab_birthday_bot",
+    "name": "403 Forbidden",
+    "statusCode": "",
+    "headers": {},
+    "x": 700,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "fn_handle_update",
+    "type": "function",
+    "z": "tab_birthday_bot",
+    "name": "Handle Telegram update",
+    "func": "const bot = global.get(\"birthdayBot\");\nconst [outgoing, callbacks] = await bot.handleTelegramUpdate(msg, env, node);\nreturn [...outgoing, ...callbacks];",
+    "outputs": 1,
+    "timeout": 30,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 710,
+    "y": 240,
+    "wires": [
+      ["fn_prepare_request"]
+    ]
+  },
+  {
+    "id": "inject_reminders",
+    "type": "inject",
+    "z": "tab_birthday_bot",
+    "name": "Check reminders every minute",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "60",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "10",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 200,
+    "y": 340,
+    "wires": [
+      ["fn_build_reminders"]
+    ]
+  },
+  {
+    "id": "fn_build_reminders",
+    "type": "function",
+    "z": "tab_birthday_bot",
+    "name": "Build due reminders",
+    "func": "const reminders = global.get(\"birthdayReminders\");\nreturn await reminders.buildDueReminderMessages(env, node);",
+    "outputs": 1,
+    "timeout": 30,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 480,
+    "y": 340,
+    "wires": [
+      ["fn_prepare_request"]
+    ]
+  },
+  {
+    "id": "fn_prepare_request",
+    "type": "function",
+    "z": "tab_birthday_bot",
+    "name": "Prepare request",
+    "func": "msg._reqPayload = msg.payload;\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 850,
+    "y": 300,
+    "wires": [
+      ["http_telegram_rest"]
+    ]
+  },
+  {
+    "id": "http_telegram_rest",
+    "type": "http request",
+    "z": "tab_birthday_bot",
+    "name": "Telegram REST API",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 1060,
+    "y": 300,
+    "wires": [
+      ["fn_check_telegram_response"]
+    ]
+  },
+  {
+    "id": "catch_errors",
+    "type": "catch",
+    "z": "tab_birthday_bot",
+    "name": "Flow errors",
+    "scope": null,
+    "uncaught": false,
+    "x": 150,
+    "y": 460,
+    "wires": [
+      ["debug_errors", "fn_format_error_alert"]
+    ]
+  },
+  {
+    "id": "debug_errors",
+    "type": "debug",
+    "z": "tab_birthday_bot",
+    "name": "errors",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "error.message",
+    "statusType": "msg",
+    "x": 340,
+    "y": 460,
+    "wires": []
+  },
+  {
+    "id": "fn_format_error_alert",
+    "type": "function",
+    "z": "tab_birthday_bot",
+    "name": "Format Error Alert",
+    "func": "const botToken = env.get(\"TELEGRAM_BOT_TOKEN\");\nconst adminChatId = env.get(\"ADMIN_CHAT_ID\");\n\nif (!adminChatId) {\n    node.warn(\"ADMIN_CHAT_ID не знайдено у файлі .env!\");\n    return null;\n}\n\nconst errorMsg = msg.error ? msg.error.message : \"Невідома помилка\";\nconst sourceNode = (msg.error && msg.error.source) ? (msg.error.source.name || msg.error.source.id) : \"Невідомий вузол\";\n\nmsg.url = `https://api.telegram.org/bot${botToken}/sendMessage`;\nmsg.method = \"POST\";\nmsg.payload = {\n    chat_id: adminChatId,\n    text: `🚨 <b>Критична помилка в потоці!</b>\\n\\n<b>Де:</b> ${sourceNode}\\n<b>Деталі:</b> <code>${errorMsg}</code>`,\n    parse_mode: \"HTML\"\n};\n\ndelete msg.headers;\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 540,
+    "wires": [
+      ["fn_prepare_request"]
+    ]
+  },
+  {
+    "id": "fn_check_telegram_response",
+    "type": "function",
+    "z": "tab_birthday_bot",
+    "name": "Check Telegram API response",
+    "func": "const response = msg.payload;\n\nif (msg.statusCode === 429 || (response && response.error_code === 429)) {\n    node.warn(`Telegram rate limit: retry after ${(response && response.parameters && response.parameters.retry_after) || 5}s`);\n    return [null, null, msg];\n}\n\nif (!response || response.ok !== true) {\n    msg.telegramApiError = {\n        url: msg.url,\n        method: msg.method,\n        statusCode: msg.statusCode,\n        response\n    };\n\n    node.warn(`Telegram API error: ${JSON.stringify(response)}`);\n    return [null, msg, null];\n}\n\nmsg.telegramApiResult = response.result;\nreturn [msg, null, null];",
+    "outputs": 3,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1290,
+    "y": 300,
+    "wires": [
+      ["debug_telegram_api_success"],
+      ["debug_telegram_api_error"],
+      ["fn_handle_rate_limit"]
+    ]
+  },
+  {
+    "id": "debug_telegram_api_success",
+    "type": "debug",
+    "z": "tab_birthday_bot",
+    "name": "Telegram API success",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "telegramApiResult",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1550,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "debug_telegram_api_error",
+    "type": "debug",
+    "z": "tab_birthday_bot",
+    "name": "Telegram API error",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "telegramApiError",
+    "targetType": "msg",
+    "statusVal": "telegramApiError.response.description",
+    "statusType": "msg",
+    "x": 1540,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "fn_handle_rate_limit",
+    "type": "function",
+    "z": "tab_birthday_bot",
+    "name": "Handle 429 Rate Limit",
+    "func": "const MAX_RETRIES = 3;\nconst retryCount = (msg._retryCount || 0) + 1;\n\nif (retryCount > MAX_RETRIES) {\n    node.warn(`Rate limit: max retries (${MAX_RETRIES}) reached for ${msg.url}. Dropping message.`);\n    node.status({ fill: \"red\", shape: \"dot\", text: `Dropped after ${MAX_RETRIES} retries` });\n    return null;\n}\n\nconst retryAfter = (msg.payload && msg.payload.parameters && msg.payload.parameters.retry_after) || 5;\n\nmsg._retryCount = retryCount;\nmsg.delay = retryAfter * 1000;\nmsg.payload = msg._reqPayload;\n\nnode.status({ fill: \"yellow\", shape: \"dot\", text: `429 – retry ${retryCount}/${MAX_RETRIES} in ${retryAfter}s` });\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1290,
+    "y": 400,
+    "wires": [
+      ["delay_rate_limit"]
+    ]
+  },
+  {
+    "id": "delay_rate_limit",
+    "type": "delay",
+    "z": "tab_birthday_bot",
+    "name": "Wait retry_after",
+    "pauseType": "delayv",
+    "timeout": "5",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1530,
+    "y": 400,
+    "wires": [
+      ["http_telegram_rest"]
+    ]
+  }
+]
